@@ -1,0 +1,13 @@
+{
+  "name": "dev.porop.blendshapepresets",
+  "displayName": "BlendShape Presets",
+  "version": "0.0.1",
+  "unity": "2022.3",
+  "description": "Export and Import BlendShape Presets",
+  "vrchatVersion": "2022.1.1",
+  "author": {
+    "name": "poropopo",
+    "email": "admin@porop.dev",
+    "url": "https://porop.dev"
+  }
+}
