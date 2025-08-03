@@ -102,9 +102,11 @@ namespace BlendShapePresets.Editor
                     BlendShapeLogger.LogFormat("ExportBlendShapeValues: File saved: {0} ({1} bytes)", path, fileInfo.Length);
                     BlendShapeLogger.LogFormat("ExportBlendShapeValues: Data collected from {0} meshes", exportData.meshDataList.Count);
 
+                    int totalBlendShapes = BlendShapeUtility.GetTotalBlendShapeCount(exportData);
                     EditorUtility.DisplayDialog("Complete",
                         $"Blend shape data saved\n{path}\n\n" +
                         $"Mesh count: {exportData.meshDataList.Count}\n" +
+                        $"Blend shape count: {totalBlendShapes}\n" +
                         $"File size: {fileInfo.Length} bytes", "OK");
                 }
                 catch (UnauthorizedAccessException ex)
@@ -193,12 +195,6 @@ namespace BlendShapePresets.Editor
 
                 try
                 {
-                    // Validate JSON size before copying to clipboard
-                    if (json.Length > 1000000) // 1MB limit warning
-                    {
-                        BlendShapeLogger.LogWarningFormat("CopyBlendShapeValuesToClipboard: Large JSON data ({0} characters) being copied to clipboard", json.Length);
-                    }
-
                     EditorGUIUtility.systemCopyBuffer = json;
                     
                     // Verify clipboard content
@@ -214,9 +210,11 @@ namespace BlendShapePresets.Editor
                     BlendShapeLogger.LogFormat("CopyBlendShapeValuesToClipboard: Data copied to clipboard ({0} characters)", json.Length);
                     BlendShapeLogger.LogFormat("CopyBlendShapeValuesToClipboard: Data collected from {0} meshes", exportData.meshDataList.Count);
 
+                    int totalBlendShapes = BlendShapeUtility.GetTotalBlendShapeCount(exportData);
                     EditorUtility.DisplayDialog("Complete",
                         $"Blend shape data copied to clipboard\n\n" +
                         $"Mesh count: {exportData.meshDataList.Count}\n" +
+                        $"Blend shape count: {totalBlendShapes}\n" +
                         $"Data size: {json.Length} characters", "OK");
                 }
                 catch (Exception ex)

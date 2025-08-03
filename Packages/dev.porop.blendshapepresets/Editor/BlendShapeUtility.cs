@@ -254,28 +254,41 @@ namespace BlendShapePresets.Editor
 
             try
             {
-                // First, try to find by exact name match
+                // Create lookup dictionaries for better performance
+                var nameToRenderer = new Dictionary<string, SkinnedMeshRenderer>();
+                var pathToRenderer = new Dictionary<string, SkinnedMeshRenderer>();
+
                 foreach (var renderer in renderers)
                 {
-                    if (renderer.name == meshData.objectName)
+                    if (renderer != null)
                     {
-                        BlendShapeLogger.LogFormat("FindMatchingRenderer: Found exact name match for '{0}'", meshData.objectName);
-                        return renderer;
+                        // Build name lookup
+                        if (!nameToRenderer.ContainsKey(renderer.name))
+                        {
+                            nameToRenderer[renderer.name] = renderer;
+                        }
+
+                        // Build path lookup
+                        string rendererPath = GetObjectPath(renderer.gameObject);
+                        if (!string.IsNullOrEmpty(rendererPath) && !pathToRenderer.ContainsKey(rendererPath))
+                        {
+                            pathToRenderer[rendererPath] = renderer;
+                        }
                     }
                 }
 
-                // If no exact name match, try to find by path
-                if (!string.IsNullOrEmpty(meshData.objectPath))
+                // First, try to find by exact name match
+                if (nameToRenderer.TryGetValue(meshData.objectName, out SkinnedMeshRenderer nameMatch))
                 {
-                    foreach (var renderer in renderers)
-                    {
-                        string rendererPath = GetObjectPath(renderer.gameObject);
-                        if (rendererPath == meshData.objectPath)
-                        {
-                            BlendShapeLogger.LogFormat("FindMatchingRenderer: Found path match for '{0}' -> '{1}'", meshData.objectPath, renderer.name);
-                            return renderer;
-                        }
-                    }
+                    BlendShapeLogger.LogFormat("FindMatchingRenderer: Found exact name match for '{0}'", meshData.objectName);
+                    return nameMatch;
+                }
+
+                // If no exact name match, try to find by path
+                if (!string.IsNullOrEmpty(meshData.objectPath) && pathToRenderer.TryGetValue(meshData.objectPath, out SkinnedMeshRenderer pathMatch))
+                {
+                    BlendShapeLogger.LogFormat("FindMatchingRenderer: Found path match for '{0}' -> '{1}'", meshData.objectPath, pathMatch.name);
+                    return pathMatch;
                 }
 
                 BlendShapeLogger.LogWarningFormat("FindMatchingRenderer: No matching renderer found for '{0}' (Path: '{1}')", meshData.objectName, meshData.objectPath);
@@ -339,6 +352,103 @@ namespace BlendShapePresets.Editor
             catch (Exception ex)
             {
                 BlendShapeLogger.LogException("CollectAllBlendShapeData: Error collecting blend shape data", ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Validates and serializes MultiMeshBlendShapeData to JSON
+        /// </summary>
+        /// <param name="exportData">The data to serialize</param>
+        /// <returns>JSON string or null if validation fails</returns>
+        public static string ValidateAndSerializeData(MultiMeshBlendShapeData exportData)
+        {
+            if (exportData == null)
+            {
+                BlendShapeLogger.LogError("ValidateAndSerializeData: Export data is null");
+                return null;
+            }
+
+            if (exportData.meshDataList == null || exportData.meshDataList.Count == 0)
+            {
+                BlendShapeLogger.LogError("ValidateAndSerializeData: No mesh data found");
+                return null;
+            }
+
+            try
+            {
+                string json = JsonUtility.ToJson(exportData, true);
+                if (string.IsNullOrEmpty(json))
+                {
+                    throw new Exception("JSON serialization resulted in empty string");
+                }
+                BlendShapeLogger.LogFormat("ValidateAndSerializeData: JSON serialization successful ({0} characters)", json.Length);
+                return json;
+            }
+            catch (Exception ex)
+            {
+                BlendShapeLogger.LogException("ValidateAndSerializeData: JSON serialization failed", ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Calculates the total number of blend shapes in MultiMeshBlendShapeData
+        /// </summary>
+        /// <param name="data">The MultiMeshBlendShapeData to count blend shapes from</param>
+        /// <returns>Total number of blend shapes across all meshes</returns>
+        public static int GetTotalBlendShapeCount(MultiMeshBlendShapeData data)
+        {
+            if (data == null || data.meshDataList == null)
+            {
+                return 0;
+            }
+
+            int totalCount = 0;
+            foreach (var meshData in data.meshDataList)
+            {
+                if (meshData != null && meshData.blendShapes != null)
+                {
+                    totalCount += meshData.blendShapes.Count;
+                }
+            }
+
+            return totalCount;
+        }
+
+        /// <summary>
+        /// Validates and deserializes JSON to MultiMeshBlendShapeData
+        /// </summary>
+        /// <param name="json">The JSON string to deserialize</param>
+        /// <returns>MultiMeshBlendShapeData or null if validation fails</returns>
+        public static MultiMeshBlendShapeData ValidateAndDeserializeData(string json)
+        {
+            if (string.IsNullOrEmpty(json))
+            {
+                BlendShapeLogger.LogError("ValidateAndDeserializeData: JSON string is null or empty");
+                return null;
+            }
+
+            try
+            {
+                MultiMeshBlendShapeData importData = JsonUtility.FromJson<MultiMeshBlendShapeData>(json);
+                if (importData == null)
+                {
+                    throw new Exception("JSON deserialization returned null");
+                }
+
+                if (importData.meshDataList == null || importData.meshDataList.Count == 0)
+                {
+                    BlendShapeLogger.LogWarning("ValidateAndDeserializeData: No valid blend shape data found");
+                    return null;
+                }
+
+                BlendShapeLogger.LogFormat("ValidateAndDeserializeData: Successfully deserialized {0} mesh data entries", importData.meshDataList.Count);
+                return importData;
+            }
+            catch (Exception ex)
+            {
+                BlendShapeLogger.LogException("ValidateAndDeserializeData: JSON parsing failed", ex);
                 return null;
             }
         }

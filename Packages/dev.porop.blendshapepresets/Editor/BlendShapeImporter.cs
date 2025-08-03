@@ -144,8 +144,10 @@ namespace BlendShapePresets.Editor
                 BlendShapeLogger.LogCompletion("ImportBlendShapeValues", duration.TotalMilliseconds);
                 BlendShapeLogger.LogFormat("ImportBlendShapeValues: Applied: {0}, Skipped: {1}, Total: {2}", appliedCount, skippedCount, importData.meshDataList.Count);
 
+                int totalBlendShapes = BlendShapeUtility.GetTotalBlendShapeCount(importData);
                 string resultMessage = $"Blend shape values imported\n\n" +
-                    $"Applied to {appliedCount} out of {importData.meshDataList.Count} meshes";
+                    $"Applied to {appliedCount} out of {importData.meshDataList.Count} meshes\n" +
+                    $"Total blend shapes: {totalBlendShapes}";
                 
                 if (skippedCount > 0)
                 {
@@ -278,8 +280,10 @@ namespace BlendShapePresets.Editor
                 BlendShapeLogger.LogCompletion("ImportBlendShapeValuesFromClipboard", duration.TotalMilliseconds);
                 BlendShapeLogger.LogFormat("ImportBlendShapeValuesFromClipboard: Applied: {0}, Skipped: {1}, Total: {2}", appliedCount, skippedCount, importData.meshDataList.Count);
 
+                int totalBlendShapes = BlendShapeUtility.GetTotalBlendShapeCount(importData);
                 string resultMessage = $"Blend shape values imported from clipboard\n\n" +
-                    $"Applied to {appliedCount} out of {importData.meshDataList.Count} meshes";
+                    $"Applied to {appliedCount} out of {importData.meshDataList.Count} meshes\n" +
+                    $"Total blend shapes: {totalBlendShapes}";
                 
                 if (skippedCount > 0)
                 {
