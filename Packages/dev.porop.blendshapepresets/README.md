@@ -25,12 +25,7 @@ BlendShape Presetsは、UnityのSkinnedMeshRendererコンポーネントに設�
 
 ## インストール方法
 
-1. Unityプロジェクトを開きます
-2. Package Managerを開きます（Window > Package Manager）
-3. 「+」ボタンをクリックし、「Add package from git URL」を選択します
-4. このパッケージのGit URLを入力してインストールします
-
-または、パッケージファイルを直接Packagesフォルダに配置してください。
+(VPM)[https://vpm.porop.dev/]からインストールしてください。
 
 ## 使用方法
 
