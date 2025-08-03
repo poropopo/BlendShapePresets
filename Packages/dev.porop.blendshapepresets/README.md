@@ -21,7 +21,7 @@ BlendShape Presetsは、UnityのSkinnedMeshRendererコンポーネントに設�
 ## 動作環境
 
 - Unity 2022.3以降
-- VRChat SDK 2022.1.1以降（VRChatアバター用途の場合）
+- VRChat SDK 3以降（VRChatアバター用途の場合）
 
 ## インストール方法
 
@@ -123,5 +123,3 @@ BlendShape Presetsは、UnityのSkinnedMeshRendererコンポーネントに設�
 MIT License
 
 Copyright (c) 2024 poropopo
-
-詳細は[LICENSE](LICENSE)ファイルをご覧ください。
