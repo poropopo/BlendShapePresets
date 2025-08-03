@@ -1,6 +1,6 @@
 {
     "name": "BlendShapePresets.Editor",
-    "rootNamespace": "",
+    "rootNamespace": "BlendShapePresets.Editor",
     "references": [],
     "includePlatforms": [
         "Editor"

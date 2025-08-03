@@ -1,200 +1,300 @@
+using System;
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 using System.IO;
 
-public static class BlendShapeImporter
+namespace BlendShapePresets.Editor
 {
-    public static void ImportBlendShapeValues(bool includeChildObjects)
+    public static class BlendShapeImporter
     {
-        GameObject selectedObject = Selection.activeGameObject;
-        if (selectedObject == null)
+        public static void ImportBlendShapeValues(bool includeChildObjects)
         {
-            EditorUtility.DisplayDialog("Error", "No object selected", "OK");
-            return;
-        }
-
-        string path = EditorUtility.OpenFilePanel(
-            "Select Blend Shape JSON File",
-            "",
-            "json");
-
-        if (string.IsNullOrEmpty(path))
-        {
-            return;
-        }
-        MultiMeshBlendShapeData importData;
-        try
-        {
-            string json = File.ReadAllText(path);
-            importData = JsonUtility.FromJson<MultiMeshBlendShapeData>(json);
-        }
-        catch (System.Exception e)
-        {
-            EditorUtility.DisplayDialog("Error", $"Failed to load JSON file: {e.Message}", "OK");
-            return;
-        }
-
-        if (importData == null || importData.meshDataList == null || importData.meshDataList.Count == 0)
-        {
-            EditorUtility.DisplayDialog("Error", "Invalid JSON file", "OK");
-            return;
-        }
-
-        // Collect target meshes for applying blend shapes
-        List<SkinnedMeshRenderer> targetRenderers = new List<SkinnedMeshRenderer>();
-
-        SkinnedMeshRenderer selectedRenderer = selectedObject.GetComponent<SkinnedMeshRenderer>();
-        if (selectedRenderer != null)
-        {
-            targetRenderers.Add(selectedRenderer);
-        }
-
-        if (includeChildObjects)
-        {
-            SkinnedMeshRenderer[] childRenderers = selectedObject.GetComponentsInChildren<SkinnedMeshRenderer>();
-            foreach (SkinnedMeshRenderer renderer in childRenderers)
+            try
             {
-                if (renderer.gameObject != selectedObject && !targetRenderers.Contains(renderer))
+                var startTime = System.DateTime.Now;
+                GameObject selectedObject = Selection.activeGameObject;
+
+                BlendShapeLogger.LogFormat("ImportBlendShapeValues: Starting import for '{0}' (includeChildren: {1})", selectedObject?.name, includeChildObjects);
+
+                if (!BlendShapeUtility.ValidateBlendShapeTarget(selectedObject, includeChildObjects))
                 {
-                    targetRenderers.Add(renderer);
+                    BlendShapeLogger.LogWarningFormat("ImportBlendShapeValues: Validation failed for '{0}'", selectedObject?.name);
+                    return;
                 }
-            }
-        }
 
-        if (targetRenderers.Count == 0)
-        {
-            EditorUtility.DisplayDialog("Warning", "No SkinnedMeshRenderer found", "OK");
-            return;
-        }
-
-        // Apply blend shape values
-        int appliedMeshes = 0;
-        int totalAppliedShapes = 0;
-
-        foreach (BlendShapeData meshData in importData.meshDataList)
-        {
-            SkinnedMeshRenderer targetRenderer = FindMatchingRenderer(targetRenderers, meshData);
-
-            if (targetRenderer == null)
-            {
-                Debug.LogWarning($"No matching mesh found: {meshData.objectName} (Path: {meshData.objectPath})");
-                continue;
-            }
-
-            int appliedShapes = ApplyBlendShapesToRenderer(targetRenderer, meshData);
-            if (appliedShapes > 0)
-            {
-                appliedMeshes++;
-                totalAppliedShapes += appliedShapes;
-                Debug.Log($"Applied {appliedShapes} blend shapes to '{targetRenderer.name}'");
-            }
-        }
-        if (appliedMeshes > 0)
-        {
-            EditorUtility.DisplayDialog("Complete",
-                $"Blend shape application completed\n\n" +
-                $"Applied meshes: {appliedMeshes}\n" +
-                $"Total applied shape keys: {totalAppliedShapes}", "OK");
-        }
-        else
-        {
-            EditorUtility.DisplayDialog("Warning", "No applicable meshes found", "OK");
-        }
-    }
-
-    private static SkinnedMeshRenderer FindMatchingRenderer(List<SkinnedMeshRenderer> renderers, BlendShapeData meshData)
-    {
-        // 1. Prioritize exact name match
-        foreach (SkinnedMeshRenderer renderer in renderers)
-        {
-            if (renderer.name == meshData.objectName)
-            {
-                return renderer;
-            }
-        }
-
-        // 2. Check path match if path is provided
-        if (!string.IsNullOrEmpty(meshData.objectPath))
-        {
-            foreach (SkinnedMeshRenderer renderer in renderers)
-            {
-                string currentPath = GetObjectPath(renderer.gameObject);
-                if (currentPath.EndsWith(meshData.objectPath))
+                string filePath = EditorUtility.OpenFilePanel("Import BlendShape Values", "", "json");
+                if (string.IsNullOrEmpty(filePath))
                 {
-                    return renderer;
+                    BlendShapeLogger.Log("ImportBlendShapeValues: User cancelled file selection");
+                    return;
                 }
-            }
-        }
 
-        return null;
-    }
+                BlendShapeLogger.LogFormat("ImportBlendShapeValues: Selected file: {0}", filePath);
 
-    private static int ApplyBlendShapesToRenderer(SkinnedMeshRenderer renderer, BlendShapeData meshData)
-    {
-        if (renderer.sharedMesh == null)
-        {
-            return 0;
-        }
-
-        Mesh mesh = renderer.sharedMesh;
-        int appliedCount = 0;
-
-        foreach (BlendShapeValue blendShape in meshData.blendShapes)
-        {
-            // Try to find by index first, then fallback to name search
-            if (blendShape.index >= 0 && blendShape.index < mesh.blendShapeCount)
-            {
-                string meshShapeName = mesh.GetBlendShapeName(blendShape.index);
-
-                if (meshShapeName == blendShape.name)
+                // Validate file exists and is readable
+                if (!File.Exists(filePath))
                 {
-                    renderer.SetBlendShapeWeight(blendShape.index, blendShape.weight);
-                    appliedCount++;
+                    BlendShapeLogger.LogErrorFormat("ImportBlendShapeValues: File does not exist: {0}", filePath);
+                    EditorUtility.DisplayDialog("Error", "Selected file does not exist", "OK");
+                    return;
                 }
-                else
+
+                string json;
+                try
                 {
-                    // Index mismatch, search by name
-                    for (int i = 0; i < mesh.blendShapeCount; i++)
+                    json = File.ReadAllText(filePath);
+                    if (string.IsNullOrEmpty(json))
                     {
-                        if (mesh.GetBlendShapeName(i) == blendShape.name)
+                        throw new Exception("File is empty or contains no readable content");
+                    }
+                    BlendShapeLogger.LogFormat("ImportBlendShapeValues: File read successfully ({0} characters)", json.Length);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    BlendShapeLogger.LogException("ImportBlendShapeValues: Access denied reading file", ex);
+                    EditorUtility.DisplayDialog("Error", $"Access denied. Please check file permissions: {ex.Message}", "OK");
+                    return;
+                }
+                catch (IOException ex)
+                {
+                    BlendShapeLogger.LogException("ImportBlendShapeValues: IO error reading file", ex);
+                    EditorUtility.DisplayDialog("Error", $"Failed to read file (IO Error): {ex.Message}", "OK");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    BlendShapeLogger.LogException("ImportBlendShapeValues: Unexpected error reading file", ex);
+                    EditorUtility.DisplayDialog("Error", $"Failed to read file: {ex.Message}", "OK");
+                    return;
+                }
+
+                MultiMeshBlendShapeData importData;
+                try
+                {
+                    importData = JsonUtility.FromJson<MultiMeshBlendShapeData>(json);
+                    if (importData == null)
+                    {
+                        throw new Exception("JSON deserialization returned null");
+                    }
+                    BlendShapeLogger.Log("ImportBlendShapeValues: JSON deserialization successful");
+                }
+                catch (Exception ex)
+                {
+                    BlendShapeLogger.LogException("ImportBlendShapeValues: JSON parsing failed", ex);
+                    EditorUtility.DisplayDialog("Error", $"Invalid JSON format: {ex.Message}", "OK");
+                    return;
+                }
+
+                if (importData.meshDataList == null || importData.meshDataList.Count == 0)
+                {
+                    BlendShapeLogger.LogWarning("ImportBlendShapeValues: No valid blend shape data found in file");
+                    EditorUtility.DisplayDialog("Warning", "No valid blend shape data found in the file", "OK");
+                    return;
+                }
+
+                BlendShapeLogger.LogFormat("ImportBlendShapeValues: Found {0} mesh data entries", importData.meshDataList.Count);
+
+                List<SkinnedMeshRenderer> renderers = BlendShapeUtility.CollectSkinnedMeshRenderers(selectedObject, includeChildObjects);
+
+                if (renderers == null || renderers.Count == 0)
+                {
+                    BlendShapeLogger.LogError("ImportBlendShapeValues: No renderers found on target object");
+                    EditorUtility.DisplayDialog("Error", "No SkinnedMeshRenderer found on target object", "OK");
+                    return;
+                }
+
+                BlendShapeLogger.LogFormat("ImportBlendShapeValues: Found {0} target renderers", renderers.Count);
+
+                int appliedCount = 0;
+                int skippedCount = 0;
+                foreach (BlendShapeData meshData in importData.meshDataList)
+                {
+                    if (meshData == null)
+                    {
+                        BlendShapeLogger.LogWarning("ImportBlendShapeValues: Null mesh data encountered, skipping");
+                        skippedCount++;
+                        continue;
+                    }
+
+                    try
+                    {
+                        SkinnedMeshRenderer targetRenderer = BlendShapeUtility.FindMatchingRenderer(renderers, meshData);
+                        if (targetRenderer != null)
                         {
-                            renderer.SetBlendShapeWeight(i, blendShape.weight);
+                            BlendShapeUtility.ApplyBlendShapesToRenderer(targetRenderer, meshData);
                             appliedCount++;
-                            break;
+                            BlendShapeLogger.LogFormat("ImportBlendShapeValues: Applied blend shapes to renderer: {0}", meshData.objectName);
+                        }
+                        else
+                        {
+                            BlendShapeLogger.LogWarningFormat("ImportBlendShapeValues: No matching renderer found for mesh: {0}", meshData.objectName);
+                            skippedCount++;
                         }
                     }
-                }
-            }
-            else
-            {
-                // Invalid index, search by name
-                for (int i = 0; i < mesh.blendShapeCount; i++)
-                {
-                    if (mesh.GetBlendShapeName(i) == blendShape.name)
+                    catch (Exception ex)
                     {
-                        renderer.SetBlendShapeWeight(i, blendShape.weight);
-                        appliedCount++;
-                        break;
+                        BlendShapeLogger.LogException($"ImportBlendShapeValues: Error applying blend shapes to mesh '{meshData.objectName}'", ex);
+                        skippedCount++;
                     }
                 }
+
+                var duration = System.DateTime.Now - startTime;
+
+                BlendShapeLogger.LogCompletion("ImportBlendShapeValues", duration.TotalMilliseconds);
+                BlendShapeLogger.LogFormat("ImportBlendShapeValues: Applied: {0}, Skipped: {1}, Total: {2}", appliedCount, skippedCount, importData.meshDataList.Count);
+
+                string resultMessage = $"Blend shape values imported\n\n" +
+                    $"Applied to {appliedCount} out of {importData.meshDataList.Count} meshes";
+                
+                if (skippedCount > 0)
+                {
+                    resultMessage += $"\nSkipped: {skippedCount} meshes";
+                }
+
+                EditorUtility.DisplayDialog("Complete", resultMessage, "OK");
+            }
+            catch (Exception ex)
+            {
+                BlendShapeLogger.LogException("ImportBlendShapeValues: Unexpected error during import", ex);
+                EditorUtility.DisplayDialog("Error", $"Import failed: {ex.Message}", "OK");
             }
         }
 
-        return appliedCount;
-    }
-
-    private static string GetObjectPath(GameObject obj)
-    {
-        string path = obj.name;
-        Transform parent = obj.transform.parent;
-
-        while (parent != null)
+        public static void ImportBlendShapeValuesFromClipboard(bool includeChildObjects)
         {
-            path = parent.name + "/" + path;
-            parent = parent.parent;
+            try
+            {
+                var startTime = System.DateTime.Now;
+                GameObject selectedObject = Selection.activeGameObject;
+
+                BlendShapeLogger.LogFormat("ImportBlendShapeValuesFromClipboard: Starting clipboard import for '{0}' (includeChildren: {1})", selectedObject?.name, includeChildObjects);
+
+                if (!BlendShapeUtility.ValidateBlendShapeTarget(selectedObject, includeChildObjects))
+                {
+                    BlendShapeLogger.LogWarningFormat("ImportBlendShapeValuesFromClipboard: Validation failed for '{0}'", selectedObject?.name);
+                    return;
+                }
+
+                string json;
+                try
+                {
+                    json = EditorGUIUtility.systemCopyBuffer;
+                    if (string.IsNullOrEmpty(json))
+                    {
+                        BlendShapeLogger.LogWarning("ImportBlendShapeValuesFromClipboard: Clipboard is empty");
+                        EditorUtility.DisplayDialog("Warning", "Clipboard is empty", "OK");
+                        return;
+                    }
+                    BlendShapeLogger.LogFormat("ImportBlendShapeValuesFromClipboard: Clipboard content retrieved ({0} characters)", json.Length);
+                }
+                catch (Exception ex)
+                {
+                    BlendShapeLogger.LogException("ImportBlendShapeValuesFromClipboard: Failed to access clipboard", ex);
+                    EditorUtility.DisplayDialog("Error", "Failed to access clipboard", "OK");
+                    return;
+                }
+
+                // Validate JSON format before parsing
+                if (!json.Trim().StartsWith("{") && !json.Trim().StartsWith("["))
+                {
+                    BlendShapeLogger.LogWarning("ImportBlendShapeValuesFromClipboard: Clipboard content does not appear to be JSON");
+                    EditorUtility.DisplayDialog("Warning", "Clipboard content does not appear to be valid JSON", "OK");
+                    return;
+                }
+
+                MultiMeshBlendShapeData importData;
+                try
+                {
+                    importData = JsonUtility.FromJson<MultiMeshBlendShapeData>(json);
+                    if (importData == null)
+                    {
+                        throw new Exception("JSON deserialization returned null");
+                    }
+                    BlendShapeLogger.Log("ImportBlendShapeValuesFromClipboard: JSON deserialization successful");
+                }
+                catch (Exception ex)
+                {
+                    BlendShapeLogger.LogException("ImportBlendShapeValuesFromClipboard: JSON parsing failed", ex);
+                    EditorUtility.DisplayDialog("Error", $"Invalid JSON format in clipboard: {ex.Message}", "OK");
+                    return;
+                }
+
+                if (importData.meshDataList == null || importData.meshDataList.Count == 0)
+                {
+                    BlendShapeLogger.LogWarning("ImportBlendShapeValuesFromClipboard: No valid blend shape data found in clipboard");
+                    EditorUtility.DisplayDialog("Warning", "No valid blend shape data found in clipboard", "OK");
+                    return;
+                }
+
+                BlendShapeLogger.LogFormat("ImportBlendShapeValuesFromClipboard: Found {0} mesh data entries", importData.meshDataList.Count);
+
+                List<SkinnedMeshRenderer> renderers = BlendShapeUtility.CollectSkinnedMeshRenderers(selectedObject, includeChildObjects);
+
+                if (renderers == null || renderers.Count == 0)
+                {
+                    BlendShapeLogger.LogError("ImportBlendShapeValuesFromClipboard: No renderers found on target object");
+                    EditorUtility.DisplayDialog("Error", "No SkinnedMeshRenderer found on target object", "OK");
+                    return;
+                }
+
+                BlendShapeLogger.LogFormat("ImportBlendShapeValuesFromClipboard: Found {0} target renderers", renderers.Count);
+
+                int appliedCount = 0;
+                int skippedCount = 0;
+                foreach (BlendShapeData meshData in importData.meshDataList)
+                {
+                    if (meshData == null)
+                    {
+                        BlendShapeLogger.LogWarning("ImportBlendShapeValuesFromClipboard: Null mesh data encountered, skipping");
+                        skippedCount++;
+                        continue;
+                    }
+
+                    try
+                    {
+                        SkinnedMeshRenderer targetRenderer = BlendShapeUtility.FindMatchingRenderer(renderers, meshData);
+                        if (targetRenderer != null)
+                        {
+                            BlendShapeUtility.ApplyBlendShapesToRenderer(targetRenderer, meshData);
+                            appliedCount++;
+                            BlendShapeLogger.LogFormat("ImportBlendShapeValuesFromClipboard: Applied blend shapes to renderer: {0}", meshData.objectName);
+                        }
+                        else
+                        {
+                            BlendShapeLogger.LogWarningFormat("ImportBlendShapeValuesFromClipboard: No matching renderer found for mesh: {0}", meshData.objectName);
+                            skippedCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        BlendShapeLogger.LogException($"ImportBlendShapeValuesFromClipboard: Error applying blend shapes to mesh '{meshData.objectName}'", ex);
+                        skippedCount++;
+                    }
+                }
+
+                var duration = System.DateTime.Now - startTime;
+
+                BlendShapeLogger.LogCompletion("ImportBlendShapeValuesFromClipboard", duration.TotalMilliseconds);
+                BlendShapeLogger.LogFormat("ImportBlendShapeValuesFromClipboard: Applied: {0}, Skipped: {1}, Total: {2}", appliedCount, skippedCount, importData.meshDataList.Count);
+
+                string resultMessage = $"Blend shape values imported from clipboard\n\n" +
+                    $"Applied to {appliedCount} out of {importData.meshDataList.Count} meshes";
+                
+                if (skippedCount > 0)
+                {
+                    resultMessage += $"\nSkipped: {skippedCount} meshes";
+                }
+
+                EditorUtility.DisplayDialog("Complete", resultMessage, "OK");
+            }
+            catch (Exception ex)
+            {
+                BlendShapeLogger.LogException("ImportBlendShapeValuesFromClipboard: Unexpected error during clipboard import", ex);
+                EditorUtility.DisplayDialog("Error", $"Clipboard import failed: {ex.Message}", "OK");
+            }
         }
 
-        return path;
+
     }
 }
